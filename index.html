@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link Library</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      color: #1f2937;
+    }
+
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 30px 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      color: #6b7280;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 25px;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 18px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    button.active {
+      background: #111827;
+      color: white;
+    }
+
+    .results {
+      display: grid;
+      gap: 12px;
+    }
+
+    .result {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .result h3 {
+      margin: 0 0 6px;
+    }
+
+    .result p {
+      margin: 3px 0;
+      color: #6b7280;
+    }
+
+    .open {
+      background: #111827;
+      color: white;
+      text-decoration: none;
+      padding: 10px 16px;
+      border-radius: 7px;
+      white-space: nowrap;
+    }
+
+    .status {
+      text-align: center;
+      color: #6b7280;
+      padding: 30px;
+    }
+
+    @media (max-width: 600px) {
+      .result {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .open {
+        width: 100%;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>Link Library</h1>
+  <div class="subtitle">
+    Search tax and recording resources
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="controls">
+
+    <input
+      id="search"
+      type="text"
+      placeholder="Search state or county..."
+      oninput="filterResults()"
+    >
+
+    <div class="buttons">
+      <button class="active" onclick="setType('all', this)">All</button>
+      <button onclick="setType('tax', this)">Tax</button>
+      <button onclick="setType('recording', this)">Recording</button>
+    </div>
+
+  </div>
+
+  <div id="results" class="results">
+    <div class="status">Loading links...</div>
+  </div>
+
+</div>
+
+<script>
+
+const TAX_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS1TFLooI6rcLQK7fjNDhCdZZD6PJJrzuWp6fFZ4srQ07z57yOWLg_d_ybGocuS-FKm-We_PY6fleOK/pub?gid=1852847162&single=true&output=csv";
+
+const RECORDING_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS1TFLooI6rcLQK7fjNDhCdZZD6PJJrzuWp6fFZ4srQ07z57yOWLg_d_ybGocuS-FKm-We_PY6fleOK/pub?gid=1489937388&single=true&output=csv";
+
+let data = [];
+let selectedType = "all";
+
+async function loadSheet(url, type) {
+
+  const response = await fetch(url);
+  const text = await response.text();
+
+  const rows = parseCSV(text);
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map(h => h.trim().toLowerCase());
+
+  const stateIndex = headers.indexOf("state");
+  const countyIndex = headers.indexOf("county");
+  const linkIndex = headers.indexOf("link");
+
+  return rows.slice(1)
+    .filter(row => row.length)
+    .map(row => ({
+      state: row[stateIndex] || "",
+      county: row[countyIndex] || "",
+      link: row[linkIndex] || "",
+      type
+    }));
+}
+
+function parseCSV(text) {
+
+  const rows = [];
+  let row = [];
+  let value = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"' && insideQuotes && next === '"') {
+      value += '"';
+      i++;
+    }
+
+    else if (char === '"') {
+      insideQuotes = !insideQuotes;
+    }
+
+    else if (char === "," && !insideQuotes) {
+      row.push(value);
+      value = "";
+    }
+
+    else if ((char === "\n" || char === "\r") && !insideQuotes) {
+
+      if (char === "\r" && next === "\n") i++;
+
+      row.push(value);
+      rows.push(row);
+
+      row = [];
+      value = "";
+    }
+
+    else {
+      value += char;
+    }
+  }
+
+  if (value || row.length) {
+    row.push(value);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+async function loadData() {
+
+  try {
+
+    const tax = await loadSheet(TAX_URL, "tax");
+    const recording = await loadSheet(RECORDING_URL, "recording");
+
+    data = [...tax, ...recording];
+
+    filterResults();
+
+  } catch (error) {
+
+    console.error(error);
+
+    document.getElementById("results").innerHTML =
+      '<div class="status">Unable to load the link library.</div>';
+  }
+}
+
+function setType(type, button) {
+
+  selectedType = type;
+
+  document
+    .querySelectorAll("button")
+    .forEach(b => b.classList.remove("active"));
+
+  button.classList.add("active");
+
+  filterResults();
+}
+
+function filterResults() {
+
+  const search =
+    document.getElementById("search").value
+      .toLowerCase()
+      .trim();
+
+  const filtered = data.filter(item => {
+
+    const matchesType =
+      selectedType === "all" ||
+      item.type === selectedType;
+
+    const matchesSearch =
+      !search ||
+      item.state.toLowerCase().includes(search) ||
+      item.county.toLowerCase().includes(search);
+
+    return matchesType && matchesSearch;
+  });
+
+  displayResults(filtered);
+}
+
+function displayResults(results) {
+
+  const container =
+    document.getElementById("results");
+
+  if (!results.length) {
+
+    container.innerHTML =
+      '<div class="status">No results found.</div>';
+
+    return;
+  }
+
+  container.innerHTML =
+    results.map(item => `
+
+      <div class="result">
+
+        <div>
+          <h3>${escapeHTML(item.county)}</h3>
+          <p>${escapeHTML(item.state)}</p>
+          <p>${capitalize(item.type)}</p>
+        </div>
+
+        <a
+          class="open"
+          href="${escapeAttribute(item.link)}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open Link ↗
+        </a>
+
+      </div>
+
+    `).join("");
+}
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function escapeHTML(text) {
+
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeAttribute(text) {
+  return escapeHTML(text);
+}
+
+loadData();
+
+</script>
+
+</body>
+</html>
